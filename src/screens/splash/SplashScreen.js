@@ -1,7 +1,7 @@
 // src/screens/splash/SplashScreen.js
 // Author: Kiran Khadka, Contact: +977-9869756622, Mail: therealkiranda@gmail.com
 // © 2026 Kiran Khadka. All rights reserved.
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, StatusBar } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withDelay,
@@ -9,9 +9,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
+import { useBooking } from '../../context/BookingContext';
+import CurrencyPickerModal, { CURRENCY_CHOSEN_KEY } from '../../components/ui/CurrencyPickerModal';
 
 export default function SplashScreen({ navigation }) {
   const { theme, hotel, ready } = useTheme();
+  const { setCurrency }         = useBooking();
+  const [destination, setDestination] = useState(null); // where to go after currency
+  const [showCurrency, setShowCurrency] = useState(false);
 
   const logoScale   = useSharedValue(0.3);
   const logoOpacity = useSharedValue(0);
@@ -43,11 +48,32 @@ export default function SplashScreen({ navigation }) {
   useEffect(() => {
     if (!ready) return;
     const timer = setTimeout(async () => {
-      const onboarded = await AsyncStorage.getItem('gl_onboarded');
-      navigation.replace(onboarded ? 'Main' : 'Onboarding');
+      const [onboarded, savedCurrency, currencyChosen] = await Promise.all([
+        AsyncStorage.getItem('gl_onboarded'),
+        AsyncStorage.getItem(CURRENCY_CHOSEN_KEY),
+        AsyncStorage.getItem(CURRENCY_CHOSEN_KEY),
+      ]);
+
+      // Restore previously chosen currency
+      if (savedCurrency) setCurrency(savedCurrency);
+
+      const dest = onboarded ? 'Main' : 'Onboarding';
+
+      if (!currencyChosen) {
+        // First time — show currency picker before routing
+        setDestination(dest);
+        setShowCurrency(true);
+      } else {
+        navigation.replace(dest);
+      }
     }, 2200);
     return () => clearTimeout(timer);
   }, [ready]);
+
+  const handleCurrencyDone = () => {
+    setShowCurrency(false);
+    navigation.replace(destination);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.primary }]}>
@@ -72,6 +98,8 @@ export default function SplashScreen({ navigation }) {
       <Animated.Text style={[styles.tagline, { color: 'rgba(255,255,255,0.6)' }, tagStyle]}>
         {hotel.tagline || 'Where Luxury Meets Serenity'}
       </Animated.Text>
+
+      <CurrencyPickerModal visible={showCurrency} onDone={handleCurrencyDone} />
     </View>
   );
 }
