@@ -7,7 +7,7 @@ import {
   StatusBar, FlatList,
 } from 'react-native';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring, withTiming,
+  useSharedValue, useAnimatedStyle, useAnimatedScrollHandler,
   interpolate, Extrapolation,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,30 +17,24 @@ const { width, height } = Dimensions.get('window');
 
 const SLIDES = [
   {
-    id: '1',
-    emoji: '🏨',
+    id: '1', emoji: '🏨',
     headline: 'Welcome to\nLuxury',
     sub: "Experience world-class hospitality nestled in the heart of Nepal's most scenic landscapes.",
-    bg: '#0f2419',
-    accent: '#c9a96e',
+    bg: '#0f2419', accent: '#c9a96e',
     detail: 'Surrounded by tea gardens and misty mountains',
   },
   {
-    id: '2',
-    emoji: '🛏',
+    id: '2', emoji: '🛏',
     headline: 'Book Your\nPerfect Room',
     sub: 'Browse our handcrafted rooms, check real-time availability, and reserve in under a minute.',
-    bg: '#1a1a2e',
-    accent: '#c9a96e',
+    bg: '#1a1a2e', accent: '#c9a96e',
     detail: 'Instant confirmation · No hidden fees',
   },
   {
-    id: '3',
-    emoji: '✨',
+    id: '3', emoji: '✨',
     headline: 'Your Stay,\nYour Way',
     sub: "Track bookings, upload payment, request anything. We're here before, during, and after your stay.",
-    bg: '#2d1b0e',
-    accent: '#c9a96e',
+    bg: '#2d1b0e', accent: '#c9a96e',
     detail: '24/7 support · Loyalty rewards · Easy checkout',
   },
 ];
@@ -48,9 +42,9 @@ const SLIDES = [
 function Slide({ item, index, scrollX }) {
   const animStyle = useAnimatedStyle(() => {
     const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
-    const scale   = interpolate(scrollX.value, inputRange, [0.85, 1, 0.85], Extrapolation.CLAMP);
-    const opacity = interpolate(scrollX.value, inputRange, [0.4, 1, 0.4],  Extrapolation.CLAMP);
-    const translateY = interpolate(scrollX.value, inputRange, [40, 0, 40], Extrapolation.CLAMP);
+    const scale    = interpolate(scrollX.value, inputRange, [0.85, 1, 0.85], Extrapolation.CLAMP);
+    const opacity  = interpolate(scrollX.value, inputRange, [0.4, 1, 0.4],   Extrapolation.CLAMP);
+    const translateY = interpolate(scrollX.value, inputRange, [40, 0, 40],   Extrapolation.CLAMP);
     return { opacity, transform: [{ scale }, { translateY }] };
   });
 
@@ -60,7 +54,6 @@ function Slide({ item, index, scrollX }) {
         <View style={styles.emojiCircle}>
           <Text style={styles.emoji}>{item.emoji}</Text>
         </View>
-
         <Animated.View style={animStyle}>
           <Text style={[styles.headline, { color: '#fff' }]}>{item.headline}</Text>
           <View style={[styles.accentLine, { backgroundColor: item.accent }]} />
@@ -74,15 +67,46 @@ function Slide({ item, index, scrollX }) {
   );
 }
 
+// Fix: each dot is its own component so hooks are not called inside map
+function AnimatedDot({ index, scrollX, active, accent }) {
+  const animStyle = useAnimatedStyle(() => {
+    const w = interpolate(
+      scrollX.value,
+      [(index - 1) * width, index * width, (index + 1) * width],
+      [8, 24, 8],
+      Extrapolation.CLAMP
+    );
+    return { width: w };
+  });
+  return (
+    <Animated.View
+      style={[
+        styles.dot,
+        animStyle,
+        { backgroundColor: active ? accent : 'rgba(255,255,255,0.3)' },
+      ]}
+    />
+  );
+}
+
 export default function OnboardingScreen({ navigation }) {
-  const { theme, hotel } = useTheme();
+  const { hotel } = useTheme();
   const [activeIndex, setActiveIndex] = useState(0);
-  const flatRef  = useRef(null);
-  const scrollX  = useSharedValue(0);
+  const flatRef = useRef(null);
+  const scrollX = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler(e => {
+    scrollX.value = e.contentOffset.x;
+  });
 
   const finish = async () => {
     await AsyncStorage.setItem('gl_onboarded', '1');
     navigation.replace('Main');
+  };
+
+  const goToLogin = async () => {
+    await AsyncStorage.setItem('gl_onboarded', '1');
+    navigation.replace('Login');
   };
 
   const next = () => {
@@ -93,9 +117,9 @@ export default function OnboardingScreen({ navigation }) {
     }
   };
 
-  const isLast = activeIndex === SLIDES.length - 1;
-  const currentBg = SLIDES[activeIndex].bg;
-  const currentAccent = SLIDES[activeIndex].accent;
+  const isLast       = activeIndex === SLIDES.length - 1;
+  const currentBg    = SLIDES[activeIndex].bg;
+  const currentAccent= SLIDES[activeIndex].accent;
 
   return (
     <View style={[styles.container, { backgroundColor: currentBg }]}>
@@ -105,18 +129,18 @@ export default function OnboardingScreen({ navigation }) {
         <Text style={[styles.skipText, { color: currentAccent }]}>Skip</Text>
       </TouchableOpacity>
 
-      <FlatList
+      <Animated.FlatList
         ref={flatRef}
         data={SLIDES}
         keyExtractor={i => i.id}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={e => {
-          scrollX.value = e.nativeEvent.contentOffset.x;
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        onMomentumScrollEnd={e => {
           setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / width));
         }}
-        scrollEventThrottle={16}
         renderItem={({ item, index }) => (
           <Slide item={item} index={index} scrollX={scrollX} />
         )}
@@ -124,23 +148,15 @@ export default function OnboardingScreen({ navigation }) {
 
       <View style={styles.footer}>
         <View style={styles.dots}>
-          {SLIDES.map((_, i) => {
-            const dotStyle = useAnimatedStyle(() => {
-              const w = interpolate(
-                scrollX.value,
-                [(i - 1) * width, i * width, (i + 1) * width],
-                [8, 24, 8],
-                Extrapolation.CLAMP
-              );
-              return { width: w };
-            });
-            return (
-              <Animated.View
-                key={i}
-                style={[styles.dot, dotStyle, { backgroundColor: i === activeIndex ? currentAccent : 'rgba(255,255,255,0.3)' }]}
-              />
-            );
-          })}
+          {SLIDES.map((_, i) => (
+            <AnimatedDot
+              key={i}
+              index={i}
+              scrollX={scrollX}
+              active={i === activeIndex}
+              accent={currentAccent}
+            />
+          ))}
         </View>
 
         <TouchableOpacity
@@ -149,14 +165,15 @@ export default function OnboardingScreen({ navigation }) {
           activeOpacity={0.85}
         >
           <Text style={[styles.nextText, { color: currentBg }]}>
-            {isLast ? 'Get Started' : 'Next'}
+            {isLast ? 'Get Started' : 'Next →'}
           </Text>
         </TouchableOpacity>
 
         {isLast && (
-          <TouchableOpacity style={styles.loginLink} onPress={() => { finish(); }}>
+          <TouchableOpacity style={styles.loginLink} onPress={goToLogin}>
             <Text style={[styles.loginLinkText, { color: 'rgba(255,255,255,0.5)' }]}>
-              Already have an account? <Text style={{ color: currentAccent }}>Sign In</Text>
+              Already have an account?{' '}
+              <Text style={{ color: currentAccent, fontWeight: '700' }}>Sign In</Text>
             </Text>
           </TouchableOpacity>
         )}
@@ -175,28 +192,18 @@ const styles = StyleSheet.create({
     width: 120, height: 120, borderRadius: 60,
     backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 40,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    marginBottom: 40, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
   emoji: { fontSize: 56 },
   headline: { fontSize: 42, fontWeight: '800', lineHeight: 50, textAlign: 'center', marginBottom: 16, letterSpacing: -1 },
   accentLine: { width: 40, height: 2, marginBottom: 20, alignSelf: 'center' },
   sub: { fontSize: 16, lineHeight: 26, textAlign: 'center', marginBottom: 24 },
-  detailPill: {
-    borderWidth: 1, borderRadius: 999,
-    paddingHorizontal: 16, paddingVertical: 8,
-    alignSelf: 'center',
-  },
+  detailPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8, alignSelf: 'center' },
   detailText: { fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
   footer: { paddingBottom: 52, paddingHorizontal: 32, alignItems: 'center' },
   dots: { flexDirection: 'row', gap: 6, marginBottom: 32, alignItems: 'center' },
   dot: { height: 8, borderRadius: 4 },
-  nextBtn: {
-    width: '100%', paddingVertical: 18,
-    borderRadius: 16, alignItems: 'center',
-    shadowColor: '#c9a96e', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
-  },
+  nextBtn: { width: '100%', paddingVertical: 18, borderRadius: 16, alignItems: 'center', shadowColor: '#c9a96e', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
   nextText: { fontSize: 16, fontWeight: '800', letterSpacing: 1 },
   loginLink: { marginTop: 20 },
   loginLinkText: { fontSize: 13 },

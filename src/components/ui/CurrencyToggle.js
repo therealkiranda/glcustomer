@@ -1,28 +1,9 @@
 // src/components/ui/CurrencyToggle.js
 // Author: Kiran Khadka, Contact: +977-9869756622, Mail: therealkiranda@gmail.com
 // © 2026 Kiran Khadka. All rights reserved.
-import React, { useRef } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { useBooking } from '../../context/BookingContext';
-
-const CURRENCIES = [
-  { code: 'NPR', flag: '🇳🇵', symbol: 'Rs' },
-  { code: 'USD', flag: '🇺🇸', symbol: '$' },
-  { code: 'INR', flag: '🇮🇳', symbol: '₹' },
-  { code: 'JPY', flag: '🇯🇵', symbol: '¥' },
-];
-
-const RATES = { NPR: 1, USD: 0.0075, INR: 0.63, JPY: 1.12 };
-
-export function convertPrice(amount, currency) {
-  return (amount * (RATES[currency] || 1)).toFixed(currency === 'JPY' ? 0 : 2);
-}
-
-export function formatPrice(amount, currency) {
-  const c = CURRENCIES.find(c => c.code === currency) || CURRENCIES[0];
-  return `${c.symbol}${convertPrice(amount, currency)}`;
-}
+import { useBooking, CURRENCIES } from '../../context/BookingContext';
 
 export default function CurrencyToggle({ style }) {
   const { currency, setCurrency } = useBooking();

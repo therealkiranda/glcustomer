@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, FlatList, ActivityIndicator, StatusBar,
+  Modal, ActivityIndicator, StatusBar, Image,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { useBooking, formatPrice } from '../../context/BookingContext';
@@ -12,58 +12,108 @@ import api from '../../services/api';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS   = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+const API_BASE = 'https://hotel.primelogic.com.np';
 
-function Calendar({ label, value, onChange, minDate }) {
-  const [show, setShow]   = useState(false);
-  const today = new Date();
-  const [year, setYear]   = useState(today.getFullYear());
+function imgUrl(path) {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  return `${API_BASE}/${path}`;
+}
+
+function StepDots({ current, theme }) {
+  return (
+    <View style={sdStyles.row}>
+      {[1,2,3].map(i => (
+        <View
+          key={i}
+          style={[
+            sdStyles.dot,
+            { backgroundColor: i <= current ? theme.secondary : 'rgba(255,255,255,0.3)' },
+            i === current && sdStyles.dotActive,
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+const sdStyles = StyleSheet.create({
+  row: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', gap: 6, alignItems: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  dotActive: { width: 20 },
+});
+
+function Calendar({ label, value, onChange, minDate, theme }) {
+  const [show, setShow] = useState(false);
+  const today           = new Date();
+  const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
 
   const first   = new Date(year, month, 1).getDay();
   const daysInM = new Date(year, month + 1, 0).getDate();
   const cells   = Array(first).fill(null).concat(Array.from({ length: daysInM }, (_, i) => i + 1));
   const toStr   = (y, m, d) => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-  const isDisabled = d => !d || (minDate && toStr(year, month, d) < minDate);
+  const today0  = toStr(today.getFullYear(), today.getMonth(), today.getDate());
+  const isDisabled = d => !d || toStr(year, month, d) < (minDate || today0);
   const isSelected = d => d && value === toStr(year, month, d);
+  const isToday    = d => d && toStr(year, month, d) === today0;
 
   const prevM = () => month === 0 ? (setMonth(11), setYear(y => y-1)) : setMonth(m => m-1);
   const nextM = () => month === 11 ? (setMonth(0),  setYear(y => y+1)) : setMonth(m => m+1);
 
   return (
-    <View style={styles.calField}>
-      <Text style={styles.calLabel}>{label}</Text>
-      <TouchableOpacity style={styles.calBtn} onPress={() => setShow(true)}>
-        <Text style={styles.calBtnText}>{value || 'Select date'}</Text>
-        <Text style={styles.calBtnIcon}>📅</Text>
+    <View style={calStyles.field}>
+      <Text style={[calStyles.label, { color: theme.textLight }]}>{label}</Text>
+      <TouchableOpacity
+        style={[calStyles.btn, { borderColor: value ? theme.primary : theme.border, backgroundColor: theme.white }]}
+        onPress={() => setShow(true)}
+      >
+        <Text style={[calStyles.btnText, { color: value ? theme.primary : theme.textLight }]}>
+          {value || 'Select date'}
+        </Text>
+        <Text style={calStyles.icon}>📅</Text>
       </TouchableOpacity>
+
       <Modal visible={show} transparent animationType="slide">
-        <View style={styles.calOverlay}>
+        <View style={calStyles.overlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShow(false)} />
-          <View style={styles.calCard}>
-            <View style={styles.calHeader}>
-              <TouchableOpacity onPress={prevM} style={styles.calNav}><Text style={styles.calNavText}>‹</Text></TouchableOpacity>
-              <Text style={styles.calTitle}>{MONTHS[month]} {year}</Text>
-              <TouchableOpacity onPress={nextM} style={styles.calNav}><Text style={styles.calNavText}>›</Text></TouchableOpacity>
+          <View style={[calStyles.card, { backgroundColor: theme.white }]}>
+            <View style={calStyles.header}>
+              <TouchableOpacity onPress={prevM} style={calStyles.nav}><Text style={calStyles.navText}>‹</Text></TouchableOpacity>
+              <Text style={[calStyles.title, { color: theme.primary }]}>{MONTHS[month]} {year}</Text>
+              <TouchableOpacity onPress={nextM} style={calStyles.nav}><Text style={calStyles.navText}>›</Text></TouchableOpacity>
             </View>
-            <View style={styles.calDaysRow}>
-              {DAYS.map(d => <Text key={d} style={styles.calDayLabel}>{d}</Text>)}
+            <View style={calStyles.daysRow}>
+              {DAYS.map(d => <Text key={d} style={[calStyles.dayLabel, { color: theme.textLight }]}>{d}</Text>)}
             </View>
-            <View style={styles.calGrid}>
+            <View style={calStyles.grid}>
               {cells.map((d, i) => (
                 <TouchableOpacity
                   key={i}
                   disabled={isDisabled(d)}
                   onPress={() => { onChange(toStr(year, month, d)); setShow(false); }}
-                  style={[styles.calCell, isSelected(d) && styles.calCellSelected, isDisabled(d) && styles.calCellDisabled]}
+                  style={[
+                    calStyles.cell,
+                    isSelected(d) && { backgroundColor: theme.primary },
+                    isToday(d) && !isSelected(d) && { borderWidth: 1.5, borderColor: theme.primary },
+                    isDisabled(d) && calStyles.disabled,
+                  ]}
                 >
-                  <Text style={[styles.calCellText, isSelected(d) && styles.calCellTextSelected, isDisabled(d) && styles.calCellTextDisabled]}>
+                  <Text style={[
+                    calStyles.cellText,
+                    { color: theme.text },
+                    isSelected(d) && { color: '#fff', fontWeight: '700' },
+                    isDisabled(d) && { color: theme.textLight },
+                  ]}>
                     {d || ''}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity style={styles.calClose} onPress={() => setShow(false)}>
-              <Text style={styles.calCloseText}>Close</Text>
+            <TouchableOpacity
+              style={[calStyles.close, { backgroundColor: theme.primary }]}
+              onPress={() => setShow(false)}
+            >
+              <Text style={[calStyles.closeText, { color: theme.secondary }]}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -71,45 +121,107 @@ function Calendar({ label, value, onChange, minDate }) {
     </View>
   );
 }
+const calStyles = StyleSheet.create({
+  field: { gap: 6 },
+  label: { fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
+  btn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  btnText: { fontSize: 14, fontWeight: '600' },
+  icon: { fontSize: 18 },
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  card: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 36 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  nav: { padding: 10 },
+  navText: { fontSize: 26, color: '#374151' },
+  title: { fontSize: 17, fontWeight: '800' },
+  daysRow: { flexDirection: 'row', marginBottom: 8 },
+  dayLabel: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  cell: { width: `${100/7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
+  disabled: { opacity: 0.3 },
+  cellText: { fontSize: 14 },
+  close: { marginTop: 18, padding: 16, alignItems: 'center', borderRadius: 14 },
+  closeText: { fontSize: 15, fontWeight: '800' },
+});
 
-function Counter({ label, value, onChange, min = 0, max = 10 }) {
+function Counter({ label, sub, value, onChange, min = 0, max = 10, theme }) {
   return (
-    <View style={styles.counter}>
-      <Text style={styles.counterLabel}>{label}</Text>
-      <View style={styles.counterRow}>
-        <TouchableOpacity style={styles.counterBtn} onPress={() => onChange(Math.max(min, value - 1))}>
-          <Text style={styles.counterBtnText}>−</Text>
+    <View style={ctrStyles.wrap}>
+      <View style={{ flex: 1 }}>
+        <Text style={[ctrStyles.label, { color: theme.text }]}>{label}</Text>
+        {sub && <Text style={[ctrStyles.sub, { color: theme.textLight }]}>{sub}</Text>}
+      </View>
+      <View style={ctrStyles.row}>
+        <TouchableOpacity
+          style={[ctrStyles.btn, { backgroundColor: theme.background, borderColor: theme.border }, value <= min && { opacity: 0.4 }]}
+          onPress={() => onChange(Math.max(min, value - 1))}
+          disabled={value <= min}
+        >
+          <Text style={[ctrStyles.btnTxt, { color: theme.primary }]}>−</Text>
         </TouchableOpacity>
-        <Text style={styles.counterVal}>{value}</Text>
-        <TouchableOpacity style={styles.counterBtn} onPress={() => onChange(Math.min(max, value + 1))}>
-          <Text style={styles.counterBtnText}>+</Text>
+        <Text style={[ctrStyles.val, { color: theme.primary }]}>{value}</Text>
+        <TouchableOpacity
+          style={[ctrStyles.btn, { backgroundColor: theme.primary }]}
+          onPress={() => onChange(Math.min(max, value + 1))}
+        >
+          <Text style={[ctrStyles.btnTxt, { color: '#fff' }]}>+</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
+const ctrStyles = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  label: { fontSize: 15, fontWeight: '700' },
+  sub: { fontSize: 12, marginTop: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  btn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  btnTxt: { fontSize: 20, fontWeight: '600', lineHeight: 22 },
+  val: { fontSize: 22, fontWeight: '800', minWidth: 30, textAlign: 'center' },
+});
 
-function RoomChip({ room, selected, onPress, currency }) {
+function RoomChip({ room, selected, onPress, currency, theme }) {
   const price = room.base_price || 0;
+  const url   = imgUrl(room.images?.[0]?.image_path);
   return (
     <TouchableOpacity
-      style={[styles.roomChip, selected && styles.roomChipSelected]}
+      style={[
+        chipStyles.chip,
+        { backgroundColor: theme.white, borderColor: theme.border },
+        selected && { backgroundColor: theme.primary, borderColor: theme.primary },
+      ]}
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <Text style={[styles.roomChipNum, selected && styles.roomChipTextSelected]}>{room.room_number}</Text>
-      <Text style={[styles.roomChipType, selected && styles.roomChipTextSelected]} numberOfLines={1}>{room.category_name}</Text>
-      <Text style={[styles.roomChipPrice, selected && styles.roomChipTextSelected]}>{formatPrice(price, currency)}/night</Text>
+      {url
+        ? <Image source={{ uri: url }} style={chipStyles.img} />
+        : <View style={[chipStyles.img, { backgroundColor: selected ? 'rgba(255,255,255,0.1)' : theme.background, alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={{ fontSize: 24 }}>🛏</Text>
+          </View>
+      }
+      <View style={chipStyles.info}>
+        <Text style={[chipStyles.num, { color: selected ? '#fff' : theme.primary }]}>Room {room.room_number}</Text>
+        <Text style={[chipStyles.type, { color: selected ? 'rgba(255,255,255,0.8)' : theme.textLight }]} numberOfLines={1}>{room.category_name}</Text>
+        <Text style={[chipStyles.price, { color: selected ? theme.secondary : theme.primary }]}>{formatPrice(price, currency)}/night</Text>
+      </View>
+      {selected && <Text style={chipStyles.check}>✓</Text>}
     </TouchableOpacity>
   );
 }
+const chipStyles = StyleSheet.create({
+  chip: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1.5, marginRight: 10, overflow: 'hidden', width: 200 },
+  img: { width: 70, height: 70 },
+  info: { flex: 1, padding: 10 },
+  num: { fontSize: 14, fontWeight: '800' },
+  type: { fontSize: 11, marginTop: 2 },
+  price: { fontSize: 12, fontWeight: '700', marginTop: 4 },
+  check: { fontSize: 18, color: '#fff', marginRight: 12, fontWeight: '700' },
+});
 
 export default function BookingStep1Screen({ navigation, route }) {
-  const { theme, hotel }                  = useTheme();
+  const { theme }    = useTheme();
   const { booking, updateBooking, currency, nights, total } = useBooking();
   const [availableRooms, setAvailableRooms] = useState([]);
   const [loadingRooms, setLoadingRooms]     = useState(false);
-
   const preselected = route.params?.room;
 
   useEffect(() => {
@@ -120,16 +232,36 @@ export default function BookingStep1Screen({ navigation, route }) {
     if (booking.checkIn && booking.checkOut && booking.checkIn < booking.checkOut) {
       setLoadingRooms(true);
       setAvailableRooms([]);
-      updateBooking({ room: preselected || null });
-      api.get('/frontdesk/available-rooms', {
-        params: { check_in: booking.checkIn, check_out: booking.checkOut }
-      }).then(r => {
-        setAvailableRooms(Array.isArray(r.data) ? r.data : []);
-      }).catch(() => {}).finally(() => setLoadingRooms(false));
+      // Keep preselected if dates change; user can manually pick another
+      // Try dedicated availability endpoint, fall back to all rooms
+      const doFetch = async () => {
+        try {
+          const r = await api.get("/rooms/available", {
+            params: { check_in: booking.checkIn, check_out: booking.checkOut },
+          });
+          return Array.isArray(r.data) ? r.data : (r.data?.data || r.data?.rooms || []);
+        } catch {
+          try {
+            const r = await api.get("/rooms");
+            const all = Array.isArray(r.data) ? r.data : (r.data?.data || r.data?.rooms || []);
+            return all.filter(rm => rm.status !== "maintenance");
+          } catch { return []; }
+        }
+      };
+      doFetch().then(data => {
+        setAvailableRooms(data);
+        if (preselected) {
+          const match = data.find(x => x.id === preselected.id);
+          if (match) updateBooking({ room: match });
+        }
+      }).finally(() => setLoadingRooms(false));
     }
   }, [booking.checkIn, booking.checkOut]);
 
-  const canProceed = booking.checkIn && booking.checkOut && booking.checkIn < booking.checkOut && booking.room;
+  const canProceed = booking.checkIn && booking.checkOut
+    && booking.checkIn < booking.checkOut && booking.room;
+
+  const totalGuests = (booking.adults || 1) + (booking.children || 0);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -139,100 +271,106 @@ export default function BookingStep1Screen({ navigation, route }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerStep}>STEP 1 OF 3</Text>
-          <Text style={styles.headerTitle}>Select Dates & Room</Text>
+          <Text style={styles.headerTitle}>Dates & Room</Text>
         </View>
-        <View style={styles.stepDots}>
-          {[1,2,3].map(i => (
-            <View key={i} style={[styles.stepDot, { backgroundColor: i === 1 ? theme.secondary : 'rgba(255,255,255,0.3)' }]} />
-          ))}
-        </View>
+        <StepDots current={1} theme={theme} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
+        {/* Dates */}
         <View style={[styles.card, { backgroundColor: theme.white }]}>
           <Text style={[styles.cardTitle, { color: theme.primary }]}>📅 Stay Dates</Text>
           <View style={styles.datesRow}>
             <View style={styles.half}>
-              <Calendar
-                label="Check-In"
-                value={booking.checkIn}
-                onChange={v => updateBooking({ checkIn: v })}
-              />
+              <Calendar label="Check-In"  value={booking.checkIn}  onChange={v => updateBooking({ checkIn: v })}  theme={theme} />
+            </View>
+            <View style={styles.arrowBox}>
+              <Text style={[styles.arrow, { color: theme.textLight }]}>→</Text>
             </View>
             <View style={styles.half}>
-              <Calendar
-                label="Check-Out"
-                value={booking.checkOut}
-                onChange={v => updateBooking({ checkOut: v })}
-                minDate={booking.checkIn}
-              />
+              <Calendar label="Check-Out" value={booking.checkOut} onChange={v => updateBooking({ checkOut: v })} minDate={booking.checkIn} theme={theme} />
             </View>
           </View>
           {nights > 0 && (
-            <View style={[styles.nightsBadge, { backgroundColor: theme.primary + '12' }]}>
-              <Text style={[styles.nightsText, { color: theme.primary }]}>🌙 {nights} night{nights !== 1 ? 's' : ''}</Text>
+            <View style={[styles.nightsBadge, { backgroundColor: theme.primary }]}>
+              <Text style={[styles.nightsText, { color: theme.secondary }]}>🌙 {nights} night{nights !== 1 ? 's' : ''} stay</Text>
             </View>
           )}
         </View>
 
+        {/* Guests */}
         <View style={[styles.card, { backgroundColor: theme.white }]}>
-          <Text style={[styles.cardTitle, { color: theme.primary }]}>👥 Guests</Text>
-          <View style={styles.countersRow}>
-            <Counter label="Adults"   value={booking.adults}   onChange={v => updateBooking({ adults: v })}   min={1} />
-            <Counter label="Children" value={booking.children} onChange={v => updateBooking({ children: v })} min={0} />
-          </View>
+          <Text style={[styles.cardTitle, { color: theme.primary }]}>👥 Guests · {totalGuests} total</Text>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <Counter label="Adults"   sub="Age 13+" value={booking.adults}   onChange={v => updateBooking({ adults: v })}   min={1} theme={theme} />
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <Counter label="Children" sub="Under 13" value={booking.children} onChange={v => updateBooking({ children: v })} min={0} theme={theme} />
         </View>
 
+        {/* Room Selection */}
         <View style={[styles.card, { backgroundColor: theme.white }]}>
           <Text style={[styles.cardTitle, { color: theme.primary }]}>🛏 Select Room</Text>
 
-          {!booking.checkIn || !booking.checkOut ? (
-            <Text style={[styles.hint, { color: theme.textLight }]}>Select dates above to see available rooms</Text>
-          ) : loadingRooms ? (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator color={theme.primary} />
-              <Text style={[styles.loadingText, { color: theme.textLight }]}>Checking availability…</Text>
-            </View>
-          ) : availableRooms.length === 0 ? (
-            <View style={[styles.noRooms, { backgroundColor: '#fef3c7' }]}>
-              <Text style={styles.noRoomsText}>⚠️ No rooms available for selected dates</Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {availableRooms.map(r => (
-                <RoomChip
-                  key={r.id}
-                  room={r}
-                  selected={booking.room?.id === r.id}
-                  onPress={() => updateBooking({ room: r })}
-                  currency={currency}
-                />
-              ))}
-            </ScrollView>
-          )}
+          {!booking.checkIn || !booking.checkOut
+            ? <View style={[styles.hintBox, { backgroundColor: theme.background }]}>
+                <Text style={[styles.hint, { color: theme.textLight }]}>
+                  📅 Select check-in and check-out dates above to see available rooms
+                </Text>
+              </View>
+            : loadingRooms
+              ? <View style={styles.loadingBox}>
+                  <ActivityIndicator color={theme.primary} size="small" />
+                  <Text style={[styles.loadingText, { color: theme.textLight }]}>Checking availability…</Text>
+                </View>
+              : availableRooms.length === 0
+                ? <View style={[styles.noRooms, { backgroundColor: '#fef3c7' }]}>
+                    <Text style={styles.noRoomsText}>⚠️ No rooms available for these dates</Text>
+                    <Text style={[styles.noRoomsSub, { color: '#92400e' }]}>Try different dates</Text>
+                  </View>
+                : <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+                    {availableRooms.map(r => (
+                      <RoomChip
+                        key={r.id}
+                        room={r}
+                        selected={booking.room?.id === r.id}
+                        onPress={() => updateBooking({ room: r })}
+                        currency={currency}
+                        theme={theme}
+                      />
+                    ))}
+                  </ScrollView>
+          }
 
           {booking.room && (
-            <View style={[styles.selectedRoom, { borderColor: theme.primary, backgroundColor: theme.primary + '08' }]}>
-              <Text style={[styles.selectedRoomTitle, { color: theme.primary }]}>
-                ✅ Room {booking.room.room_number} — {booking.room.category_name}
-              </Text>
-              <Text style={[styles.selectedRoomSub, { color: theme.textLight }]}>
-                Floor {booking.room.floor || '—'} · {formatPrice(booking.room.base_price || 0, currency)}/night
-              </Text>
-              {nights > 0 && (
-                <Text style={[styles.selectedRoomTotal, { color: theme.primary }]}>
-                  Estimated total: {formatPrice(total, currency)} (incl. taxes)
+            <View style={[styles.selectedBox, { borderColor: theme.primary, backgroundColor: theme.primary + '08' }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.selectedTitle, { color: theme.primary }]}>
+                  ✅ Room {booking.room.room_number} — {booking.room.category_name}
                 </Text>
+                <Text style={[styles.selectedSub, { color: theme.textLight }]}>
+                  {formatPrice(booking.room.base_price || 0, currency)}/night
+                  {booking.room.floor ? ` · Floor ${booking.room.floor}` : ''}
+                </Text>
+              </View>
+              {nights > 0 && (
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={[styles.selectedTotal, { color: theme.primary }]}>{formatPrice(total, currency)}</Text>
+                  <Text style={[styles.selectedTotalSub, { color: theme.textLight }]}>est. total</Text>
+                </View>
               )}
             </View>
           )}
         </View>
 
         <TouchableOpacity
-          style={[styles.nextBtn, { backgroundColor: canProceed ? theme.primary : theme.border }]}
+          style={[
+            styles.nextBtn,
+            { backgroundColor: canProceed ? theme.primary : theme.border },
+            canProceed && styles.nextBtnActive,
+          ]}
           onPress={() => canProceed && navigation.navigate('Step2')}
           disabled={!canProceed}
           activeOpacity={0.85}
@@ -253,59 +391,29 @@ const styles = StyleSheet.create({
   backText: { color: '#fff', fontSize: 22 },
   headerStep: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '700', letterSpacing: 2 },
   headerTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
-  stepDots: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 },
-  stepDot: { width: 8, height: 8, borderRadius: 4 },
-  content: { padding: 16, gap: 12, paddingBottom: 40 },
-  card: { borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  cardTitle: { fontSize: 14, fontWeight: '700', marginBottom: 14 },
-  datesRow: { flexDirection: 'row', gap: 12 },
+  content: { padding: 16, gap: 14, paddingBottom: 48 },
+  card: { borderRadius: 18, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
+  cardTitle: { fontSize: 14, fontWeight: '800', marginBottom: 16, letterSpacing: 0.2 },
+  datesRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   half: { flex: 1 },
-  calField: { gap: 6 },
-  calLabel: { fontSize: 11, fontWeight: '700', color: '#374151', letterSpacing: 1 },
-  calBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderColor: '#e5e0d5', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  calBtnText: { fontSize: 13, color: '#1e293b' },
-  calBtnIcon: { fontSize: 16 },
-  nightsBadge: { borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 12 },
-  nightsText: { fontSize: 13, fontWeight: '700' },
-  countersRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  counter: { alignItems: 'center', gap: 8 },
-  counterLabel: { fontSize: 12, fontWeight: '600', color: '#374151' },
-  counterRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  counterBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e5e7eb' },
-  counterBtnText: { fontSize: 20, fontWeight: '600', color: '#374151' },
-  counterVal: { fontSize: 20, fontWeight: '800', color: '#1e293b', minWidth: 28, textAlign: 'center' },
-  hint: { textAlign: 'center', fontSize: 13, paddingVertical: 12 },
-  loadingBox: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
+  arrowBox: { paddingBottom: 14, paddingHorizontal: 4 },
+  arrow: { fontSize: 18 },
+  nightsBadge: { borderRadius: 10, padding: 10, alignItems: 'center', marginTop: 14 },
+  nightsText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
+  divider: { height: 1 },
+  hintBox: { borderRadius: 12, padding: 16 },
+  hint: { fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  loadingBox: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
   loadingText: { fontSize: 13 },
-  noRooms: { borderRadius: 10, padding: 12, alignItems: 'center' },
-  noRoomsText: { color: '#92400e', fontSize: 13, fontWeight: '600' },
-  roomChip: { borderRadius: 12, padding: 12, marginRight: 10, backgroundColor: '#f8f5f0', borderWidth: 1.5, borderColor: '#e5e0d5', minWidth: 100, alignItems: 'center' },
-  roomChipSelected: { backgroundColor: '#1a3c2e', borderColor: '#1a3c2e' },
-  roomChipNum: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
-  roomChipType: { fontSize: 10, color: '#6b7280', marginTop: 2 },
-  roomChipPrice: { fontSize: 10, color: '#6b7280', marginTop: 2 },
-  roomChipTextSelected: { color: '#fff' },
-  selectedRoom: { marginTop: 12, borderRadius: 12, padding: 12, borderWidth: 1.5 },
-  selectedRoomTitle: { fontSize: 13, fontWeight: '700' },
-  selectedRoomSub: { fontSize: 12, marginTop: 2 },
-  selectedRoomTotal: { fontSize: 13, fontWeight: '800', marginTop: 6 },
-  nextBtn: { borderRadius: 16, paddingVertical: 18, alignItems: 'center', marginTop: 8 },
-  nextBtnText: { fontSize: 15, fontWeight: '700' },
-  calOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  calCard: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
-  calHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  calNav: { padding: 8 },
-  calNavText: { fontSize: 24, color: '#374151' },
-  calTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
-  calDaysRow: { flexDirection: 'row', marginBottom: 8 },
-  calDayLabel: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#6b7280' },
-  calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  calCell: { width: `${100/7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
-  calCellSelected: { backgroundColor: '#1a3c2e' },
-  calCellDisabled: { opacity: 0.3 },
-  calCellText: { fontSize: 14, color: '#1e293b' },
-  calCellTextSelected: { color: '#fff', fontWeight: '700' },
-  calCellTextDisabled: { color: '#9ca3af' },
-  calClose: { marginTop: 16, padding: 14, alignItems: 'center', backgroundColor: '#f8f5f0', borderRadius: 12 },
-  calCloseText: { fontSize: 14, fontWeight: '700', color: '#374151' },
+  noRooms: { borderRadius: 12, padding: 14, alignItems: 'center' },
+  noRoomsText: { color: '#92400e', fontSize: 14, fontWeight: '700', marginBottom: 4 },
+  noRoomsSub: { fontSize: 12 },
+  selectedBox: { flexDirection: 'row', alignItems: 'center', marginTop: 14, borderRadius: 14, padding: 14, borderWidth: 1.5 },
+  selectedTitle: { fontSize: 14, fontWeight: '800', marginBottom: 4 },
+  selectedSub: { fontSize: 12 },
+  selectedTotal: { fontSize: 20, fontWeight: '800' },
+  selectedTotalSub: { fontSize: 11, marginTop: 2 },
+  nextBtn: { borderRadius: 16, paddingVertical: 18, alignItems: 'center', marginTop: 4 },
+  nextBtnActive: { shadowColor: '#1a3c2e', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  nextBtnText: { fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
 });

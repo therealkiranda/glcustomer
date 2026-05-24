@@ -12,37 +12,46 @@ import { useBooking, formatPrice } from '../../context/BookingContext';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 
+const API_BASE = 'https://hotel.primelogic.com.np';
+
 const PAY_METHODS = [
-  { key: 'qr_transfer',    icon: '📱', label: 'QR / Bank Transfer' },
-  { key: 'cash',           icon: '💵', label: 'Cash on Arrival' },
-  { key: 'bank_transfer',  icon: '🏦', label: 'Bank Transfer' },
+  { key: 'qr_transfer',   icon: '📱', label: 'QR / Bank Transfer',  sub: 'Scan QR and upload proof' },
+  { key: 'cash',          icon: '💵', label: 'Cash on Arrival',     sub: 'Pay at the front desk' },
+  { key: 'bank_transfer', icon: '🏦', label: 'Direct Bank Transfer', sub: 'Transfer to hotel account' },
 ];
 
-function SummaryRow({ label, value, bold }) {
+function SummaryRow({ label, value, bold, accent }) {
   return (
-    <View style={styles.summaryRow}>
-      <Text style={[styles.summaryLabel, bold && styles.summaryBold]}>{label}</Text>
-      <Text style={[styles.summaryValue, bold && styles.summaryBold]}>{value}</Text>
+    <View style={[srStyles.row, bold && srStyles.boldRow]}>
+      <Text style={[srStyles.label, bold && srStyles.boldText]}>{label}</Text>
+      <Text style={[srStyles.value, bold && srStyles.boldText, accent && srStyles.accentText]}>{value}</Text>
     </View>
   );
 }
+const srStyles = StyleSheet.create({
+  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  boldRow: { borderBottomWidth: 0, paddingTop: 12, paddingBottom: 4 },
+  label: { fontSize: 13, color: '#6b7280' },
+  value: { fontSize: 13, color: '#1e293b', fontWeight: '500', maxWidth: '55%', textAlign: 'right' },
+  boldText: { fontWeight: '800', fontSize: 18, color: '#1a3c2e' },
+  accentText: { color: '#c9a96e' },
+});
 
 export default function BookingStep3Screen({ navigation }) {
-  const { theme, hotel }                         = useTheme();
+  const { theme, hotel }   = useTheme();
   const { booking, updateBooking, resetBooking, nights, subtotal, taxes, serviceCharge, total, currency } = useBooking();
-  const { user }                                 = useAuth();
-  const [loading, setLoading]                    = useState(false);
-  const [proofUri, setProofUri]                  = useState(null);
-  const [qrInfo, setQrInfo]                      = useState(hotel);
+  const { user }           = useAuth();
+  const [loading, setLoading]   = useState(false);
+  const [proofUri, setProofUri] = useState(null);
 
   const { guestDetails, room, checkIn, checkOut, paymentMethod = 'qr_transfer' } = booking;
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission required', 'Please allow photo access.'); return; }
+    if (status !== 'granted') { Alert.alert('Permission Required', 'Please allow photo library access.'); return; }
     const r = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
+      quality: 0.85,
     });
     if (!r.canceled) setProofUri(r.assets[0].uri);
   };
@@ -53,39 +62,30 @@ export default function BookingStep3Screen({ navigation }) {
     }
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('room_id',          room.id);
-      formData.append('check_in_date',    checkIn);
-      formData.append('check_out_date',   checkOut);
-      formData.append('adults',           booking.adults);
-      formData.append('children',         booking.children);
-      formData.append('guest_first_name', guestDetails.first_name);
-      formData.append('guest_last_name',  guestDetails.last_name);
-      formData.append('guest_email',      guestDetails.email);
-      formData.append('guest_phone',      guestDetails.phone);
-      formData.append('guest_nationality',guestDetails.nationality);
-      formData.append('guest_id_type',    guestDetails.id_type);
-      formData.append('guest_id_number',  guestDetails.id_number || '');
-      formData.append('payment_method',   paymentMethod);
-      formData.append('special_requests', booking.specialRequests || '');
-
+      const fd = new FormData();
+      fd.append('room_id',           room.id);
+      fd.append('check_in_date',     checkIn);
+      fd.append('check_out_date',    checkOut);
+      fd.append('adults',            booking.adults);
+      fd.append('children',          booking.children);
+      fd.append('guest_first_name',  guestDetails.first_name);
+      fd.append('guest_last_name',   guestDetails.last_name);
+      fd.append('guest_email',       guestDetails.email);
+      fd.append('guest_phone',       guestDetails.phone);
+      fd.append('guest_nationality', guestDetails.nationality || '');
+      fd.append('guest_id_type',     guestDetails.id_type || '');
+      fd.append('guest_id_number',   guestDetails.id_number || '');
+      fd.append('payment_method',    paymentMethod);
+      fd.append('special_requests',  booking.specialRequests || '');
       if (proofUri) {
-        formData.append('payment_proof', {
-          uri: proofUri, name: 'proof.jpg', type: 'image/jpeg',
-        });
+        fd.append('payment_proof', { uri: proofUri, name: 'proof.jpg', type: 'image/jpeg' });
       }
-
-      const res = await api.post('/bookings', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
+      const res = await api.post('/bookings', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       resetBooking();
       navigation.replace('Success', { booking: res.data });
     } catch (e) {
       Alert.alert('Booking Failed', e.response?.data?.error || e.response?.data?.message || 'Something went wrong. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
@@ -96,14 +96,12 @@ export default function BookingStep3Screen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerStep}>STEP 3 OF 3</Text>
           <Text style={styles.headerTitle}>Confirm & Pay</Text>
         </View>
         <View style={styles.stepDots}>
-          {[1,2,3].map(i => (
-            <View key={i} style={[styles.stepDot, { backgroundColor: theme.secondary }]} />
-          ))}
+          {[1,2,3].map(i => <View key={i} style={[styles.stepDot, { backgroundColor: theme.secondary }]} />)}
         </View>
       </View>
 
@@ -112,27 +110,27 @@ export default function BookingStep3Screen({ navigation }) {
         {/* Booking Summary */}
         <View style={[styles.card, { backgroundColor: theme.white }]}>
           <Text style={[styles.cardTitle, { color: theme.primary }]}>📋 Booking Summary</Text>
-          <SummaryRow label="Room"       value={`${room?.room_number} — ${room?.category_name}`} />
-          <SummaryRow label="Check-in"   value={checkIn} />
-          <SummaryRow label="Check-out"  value={checkOut} />
-          <SummaryRow label="Nights"     value={`${nights} night${nights !== 1 ? 's' : ''}`} />
-          <SummaryRow label="Guests"     value={`${booking.adults} adults, ${booking.children} children`} />
+          <SummaryRow label="Room"      value={`${room?.room_number} — ${room?.category_name}`} />
+          <SummaryRow label="Check-in"  value={checkIn} />
+          <SummaryRow label="Check-out" value={checkOut} />
+          <SummaryRow label="Nights"    value={`${nights} night${nights !== 1 ? 's' : ''}`} />
+          <SummaryRow label="Guests"    value={`${booking.adults} adult${booking.adults !== 1 ? 's' : ''}${booking.children > 0 ? `, ${booking.children} child` : ''}`} />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <SummaryRow label="Room rate"  value={`${formatPrice(room?.base_price || 0, currency)} × ${nights}`} />
-          <SummaryRow label="Subtotal"   value={formatPrice(subtotal, currency)} />
-          <SummaryRow label="VAT (13%)"  value={formatPrice(taxes, currency)} />
-          <SummaryRow label="Service (10%)" value={formatPrice(serviceCharge, currency)} />
+          <SummaryRow label={`Room rate × ${nights}`}  value={formatPrice(subtotal, currency)} />
+          <SummaryRow label="VAT (13%)"                value={formatPrice(taxes, currency)} />
+          <SummaryRow label="Service charge (10%)"     value={formatPrice(serviceCharge, currency)} />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <SummaryRow label="Total"      value={formatPrice(total, currency)} bold />
+          <SummaryRow label="Total Payable" value={formatPrice(total, currency)} bold accent />
         </View>
 
         {/* Guest Summary */}
         <View style={[styles.card, { backgroundColor: theme.white }]}>
           <Text style={[styles.cardTitle, { color: theme.primary }]}>👤 Guest Details</Text>
-          <SummaryRow label="Name"   value={`${guestDetails?.first_name} ${guestDetails?.last_name}`} />
-          <SummaryRow label="Email"  value={guestDetails?.email} />
-          <SummaryRow label="Phone"  value={guestDetails?.phone} />
+          <SummaryRow label="Name"    value={`${guestDetails?.first_name} ${guestDetails?.last_name}`} />
+          <SummaryRow label="Email"   value={guestDetails?.email} />
+          <SummaryRow label="Phone"   value={guestDetails?.phone} />
           {guestDetails?.nationality && <SummaryRow label="Nationality" value={guestDetails.nationality} />}
+          {guestDetails?.id_type     && <SummaryRow label="ID Type"     value={guestDetails.id_type} />}
         </View>
 
         {/* Payment Method */}
@@ -141,72 +139,86 @@ export default function BookingStep3Screen({ navigation }) {
           {PAY_METHODS.map(m => (
             <TouchableOpacity
               key={m.key}
-              style={[styles.payMethod, paymentMethod === m.key && { borderColor: theme.primary, backgroundColor: theme.primary + '08' }]}
+              style={[
+                styles.payMethod,
+                { borderColor: theme.border },
+                paymentMethod === m.key && { borderColor: theme.primary, backgroundColor: theme.primary + '08' },
+              ]}
               onPress={() => updateBooking({ paymentMethod: m.key })}
+              activeOpacity={0.8}
             >
-              <Text style={styles.payMethodIcon}>{m.icon}</Text>
-              <Text style={[styles.payMethodLabel, { color: paymentMethod === m.key ? theme.primary : theme.text }]}>{m.label}</Text>
-              {paymentMethod === m.key && <Text style={[styles.payMethodCheck, { color: theme.primary }]}>✓</Text>}
+              <Text style={styles.payIcon}>{m.icon}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.payLabel, { color: paymentMethod === m.key ? theme.primary : theme.text }]}>{m.label}</Text>
+                <Text style={[styles.paySub, { color: theme.textLight }]}>{m.sub}</Text>
+              </View>
+              <View style={[styles.radio, { borderColor: paymentMethod === m.key ? theme.primary : theme.border }]}>
+                {paymentMethod === m.key && <View style={[styles.radioDot, { backgroundColor: theme.primary }]} />}
+              </View>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* QR Code Display */}
+        {/* QR & Proof */}
         {paymentMethod === 'qr_transfer' && (
           <View style={[styles.card, { backgroundColor: theme.white }]}>
             <Text style={[styles.cardTitle, { color: theme.primary }]}>📱 Scan & Pay</Text>
-            {hotel.qr_code_image_path ? (
-              <Image
-                source={{ uri: `https://hotel.primelogic.com.np/${hotel.qr_code_image_path}` }}
-                style={styles.qrImage}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={[styles.qrPlaceholder, { backgroundColor: theme.primary + '10' }]}>
-                <Text style={styles.qrPlaceholderText}>📱</Text>
-                <Text style={[styles.qrPlaceholderSub, { color: theme.textLight }]}>QR code not available</Text>
-              </View>
-            )}
-            {hotel.qr_bank_name && (
-              <View style={styles.bankInfo}>
-                <Text style={[styles.bankName, { color: theme.primary }]}>{hotel.qr_bank_name}</Text>
-                {hotel.qr_account_name && <Text style={[styles.bankDetail, { color: theme.textLight }]}>Account: {hotel.qr_account_name}</Text>}
+
+            {hotel.qr_code_image_path
+              ? <Image
+                  source={{ uri: `${API_BASE}/${hotel.qr_code_image_path}` }}
+                  style={styles.qrImage}
+                  resizeMode="contain"
+                />
+              : <View style={[styles.qrPlaceholder, { backgroundColor: theme.background }]}>
+                  <Text style={{ fontSize: 52 }}>📱</Text>
+                  <Text style={[styles.qrPlaceholderText, { color: theme.textLight }]}>QR not configured</Text>
+                </View>
+            }
+
+            {(hotel.qr_bank_name || hotel.qr_account_name) && (
+              <View style={[styles.bankBox, { backgroundColor: theme.background }]}>
+                {hotel.qr_bank_name     && <Text style={[styles.bankName,  { color: theme.primary }]}>{hotel.qr_bank_name}</Text>}
+                {hotel.qr_account_name  && <Text style={[styles.bankDetail, { color: theme.textLight }]}>Account: {hotel.qr_account_name}</Text>}
                 {hotel.qr_account_number && <Text style={[styles.bankDetail, { color: theme.textLight }]}>Number: {hotel.qr_account_number}</Text>}
               </View>
             )}
+
             {hotel.qr_payment_instructions && (
               <Text style={[styles.payInstructions, { color: theme.textLight }]}>{hotel.qr_payment_instructions}</Text>
             )}
 
-            {/* Proof Upload */}
             <Text style={[styles.proofLabel, { color: theme.primary }]}>Upload Payment Proof *</Text>
-            <TouchableOpacity style={[styles.uploadBtn, { borderColor: theme.primary }]} onPress={pickImage}>
+            <TouchableOpacity
+              style={[styles.uploadBtn, { borderColor: proofUri ? theme.primary : theme.border }]}
+              onPress={pickImage}
+            >
               {proofUri
                 ? <Image source={{ uri: proofUri }} style={styles.proofPreview} resizeMode="cover" />
                 : <>
                     <Text style={styles.uploadIcon}>📎</Text>
                     <Text style={[styles.uploadText, { color: theme.primary }]}>Tap to upload proof</Text>
-                    <Text style={[styles.uploadSub, { color: theme.textLight }]}>Photo or screenshot</Text>
+                    <Text style={[styles.uploadSub, { color: theme.textLight }]}>Screenshot or photo of payment</Text>
                   </>
               }
             </TouchableOpacity>
             {proofUri && (
-              <TouchableOpacity onPress={() => setProofUri(null)} style={styles.removeProof}>
-                <Text style={[styles.removeProofText, { color: theme.error }]}>Remove proof ✕</Text>
+              <TouchableOpacity onPress={() => setProofUri(null)} style={styles.removeBtn}>
+                <Text style={[styles.removeBtnText, { color: theme.error || '#dc2626' }]}>Remove ✕</Text>
               </TouchableOpacity>
             )}
           </View>
         )}
 
         <TouchableOpacity
-          style={[styles.confirmBtn, { backgroundColor: theme.primary }, loading && styles.confirmDisabled]}
+          style={[styles.confirmBtn, { backgroundColor: theme.primary }, loading && { opacity: 0.7 }]}
           onPress={handleSubmit}
           disabled={loading}
           activeOpacity={0.85}
         >
           {loading
             ? <ActivityIndicator color={theme.secondary} />
-            : <Text style={[styles.confirmBtnText, { color: theme.secondary }]}>✅ Confirm Booking</Text>
+            : <Text style={[styles.confirmText, { color: theme.secondary }]}>✅ Confirm Booking</Text>
           }
         </TouchableOpacity>
       </ScrollView>
@@ -222,36 +234,35 @@ const styles = StyleSheet.create({
   headerStep: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '700', letterSpacing: 2 },
   headerTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
   stepDots: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', gap: 6 },
-  stepDot: { width: 8, height: 8, borderRadius: 4 },
-  content: { padding: 16, gap: 12, paddingBottom: 40 },
-  card: { borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  cardTitle: { fontSize: 14, fontWeight: '700', marginBottom: 14 },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  summaryLabel: { fontSize: 13, color: '#374151' },
-  summaryValue: { fontSize: 13, color: '#1e293b', fontWeight: '500', maxWidth: '55%', textAlign: 'right' },
-  summaryBold: { fontWeight: '800', fontSize: 15 },
+  stepDot: { width: 20, height: 8, borderRadius: 4 },
+  content: { padding: 16, gap: 14, paddingBottom: 48 },
+  card: { borderRadius: 18, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 3 },
+  cardTitle: { fontSize: 14, fontWeight: '800', marginBottom: 14 },
   divider: { height: 1, marginVertical: 8 },
-  payMethod: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#e5e0d5', marginBottom: 10 },
-  payMethodIcon: { fontSize: 20 },
-  payMethodLabel: { flex: 1, fontSize: 14, fontWeight: '600' },
-  payMethodCheck: { fontSize: 16, fontWeight: '700' },
-  qrImage: { width: '100%', height: 220, borderRadius: 12, marginBottom: 16 },
-  qrPlaceholder: { height: 200, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  qrPlaceholderText: { fontSize: 48 },
-  qrPlaceholderSub: { fontSize: 13, marginTop: 8 },
-  bankInfo: { backgroundColor: '#f8f5f0', borderRadius: 10, padding: 12, marginBottom: 12 },
-  bankName: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
-  bankDetail: { fontSize: 13, marginTop: 2 },
+  payMethod: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 14, borderWidth: 1.5, marginBottom: 10 },
+  payIcon: { fontSize: 22 },
+  payLabel: { fontSize: 14, fontWeight: '700' },
+  paySub: { fontSize: 12, marginTop: 2 },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
+  qrImage: { width: '100%', height: 240, borderRadius: 14, marginBottom: 16 },
+  qrPlaceholder: { height: 200, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  qrPlaceholderText: { fontSize: 13, marginTop: 10 },
+  bankBox: { borderRadius: 12, padding: 14, marginBottom: 14 },
+  bankName: { fontSize: 15, fontWeight: '800', marginBottom: 6 },
+  bankDetail: { fontSize: 13, marginTop: 3 },
   payInstructions: { fontSize: 13, lineHeight: 20, marginBottom: 16, fontStyle: 'italic' },
-  proofLabel: { fontSize: 13, fontWeight: '700', marginBottom: 10 },
-  uploadBtn: { borderWidth: 2, borderStyle: 'dashed', borderRadius: 14, padding: 24, alignItems: 'center', minHeight: 120 },
-  uploadIcon: { fontSize: 32, marginBottom: 8 },
-  uploadText: { fontSize: 14, fontWeight: '700' },
-  uploadSub: { fontSize: 12, marginTop: 4 },
-  proofPreview: { width: '100%', height: 200, borderRadius: 10 },
-  removeProof: { alignItems: 'center', padding: 8, marginTop: 8 },
-  removeProofText: { fontSize: 13, fontWeight: '600' },
-  confirmBtn: { borderRadius: 16, paddingVertical: 20, alignItems: 'center', marginTop: 8 },
-  confirmDisabled: { opacity: 0.6 },
-  confirmBtnText: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  proofLabel: { fontSize: 13, fontWeight: '800', marginBottom: 12 },
+  uploadBtn: { borderWidth: 2, borderStyle: 'dashed', borderRadius: 16, padding: 28, alignItems: 'center', minHeight: 130 },
+  uploadIcon: { fontSize: 36, marginBottom: 10 },
+  uploadText: { fontSize: 15, fontWeight: '700' },
+  uploadSub: { fontSize: 12, marginTop: 6 },
+  proofPreview: { width: '100%', height: 210, borderRadius: 12 },
+  removeBtn: { alignItems: 'center', paddingVertical: 10, marginTop: 8 },
+  removeBtnText: { fontSize: 13, fontWeight: '700' },
+  confirmBtn: {
+    borderRadius: 18, paddingVertical: 20, alignItems: 'center',
+    shadowColor: '#1a3c2e', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8,
+  },
+  confirmText: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
 });
