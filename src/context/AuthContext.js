@@ -9,48 +9,51 @@ export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser]       = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Fix: loading starts false — RootNavigator must not gate on this.
+  // SplashScreen handles all startup sequencing independently.
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const timeout = setTimeout(() => setLoading(false), 3000);
-    loadUser().finally(() => { clearTimeout(timeout); setLoading(false); });
+    loadUser();
   }, []);
 
   const loadUser = async () => {
     try {
       const token = await AsyncStorage.getItem('gl_guest_token');
       if (!token) return;
+      // Also try cached user immediately for instant UI
+      const cached = await AsyncStorage.getItem('gl_guest_user');
+      if (cached) {
+        try { setUser(JSON.parse(cached)); } catch {}
+      }
+      // Then verify with server in background
       const r = await api.get('/auth/me');
-      setUser(r.data?.user || r.data);
-    } catch {}
+      const userData = r.data?.user || r.data;
+      setUser(userData);
+      await AsyncStorage.setItem('gl_guest_user', JSON.stringify(userData));
+    } catch {
+      // Token invalid — clear it silently
+      await AsyncStorage.multiRemove(['gl_guest_token', 'gl_guest_user']).catch(() => {});
+      setUser(null);
+    }
   };
 
   const login = async (email, password) => {
-    try {
-      const r = await api.post('/auth/login', { email, password });
-      const token = r.data.token;
-      const userData = r.data.user || r.data;
-      await AsyncStorage.setItem('gl_guest_token', token);
-      await AsyncStorage.setItem('gl_guest_user', JSON.stringify(userData));
-      setUser(userData);
-      return { success: true };
-    } catch (e) {
-      return { success: false, error: e.response?.data?.error || e.response?.data?.message || 'Login failed' };
-    }
+    const r = await api.post('/auth/login', { email, password });
+    const token    = r.data.token;
+    const userData = r.data.user || r.data;
+    await AsyncStorage.setItem('gl_guest_token', token);
+    await AsyncStorage.setItem('gl_guest_user', JSON.stringify(userData));
+    setUser(userData);
   };
 
   const register = async (data) => {
-    try {
-      const r = await api.post('/auth/register', data);
-      const token = r.data.token;
-      const userData = r.data.user || r.data;
-      await AsyncStorage.setItem('gl_guest_token', token);
-      await AsyncStorage.setItem('gl_guest_user', JSON.stringify(userData));
-      setUser(userData);
-      return { success: true };
-    } catch (e) {
-      return { success: false, error: e.response?.data?.error || e.response?.data?.message || 'Registration failed' };
-    }
+    const r = await api.post('/auth/register', data);
+    const token    = r.data.token;
+    const userData = r.data.user || r.data;
+    await AsyncStorage.setItem('gl_guest_token', token);
+    await AsyncStorage.setItem('gl_guest_user', JSON.stringify(userData));
+    setUser(userData);
   };
 
   const logout = async () => {

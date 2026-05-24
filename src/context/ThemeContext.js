@@ -13,22 +13,37 @@ const DEFAULTS = {
 };
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme]     = useState(DEFAULTS);
-  const [hotel, setHotel]     = useState({ name: 'Hotel', tagline: '', currency_symbol: 'Rs', default_currency: 'NPR' });
-  const [ready, setReady]     = useState(false);
+  const [theme, setTheme] = useState(DEFAULTS);
+  const [hotel, setHotel] = useState({
+    name: '', tagline: '', currency_symbol: 'Rs', default_currency: 'NPR',
+  });
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    api.get('/public/settings').then(r => {
-      const d = r.data;
-      if (d.theme) setTheme({
-        ...DEFAULTS,
-        primary:    d.theme.primary_color    || DEFAULTS.primary,
-        secondary:  d.theme.secondary_color  || DEFAULTS.secondary,
-        background: d.theme.background_color || DEFAULTS.background,
-        text:       d.theme.text_color       || DEFAULTS.text,
+    // Hard timeout — ready fires after 4s max regardless of API
+    const hardTimeout = setTimeout(() => setReady(true), 4000);
+
+    api.get('/public/settings')
+      .then(r => {
+        const d = r.data;
+        if (d?.theme) {
+          setTheme({
+            ...DEFAULTS,
+            primary:    d.theme.primary_color    || DEFAULTS.primary,
+            secondary:  d.theme.secondary_color  || DEFAULTS.secondary,
+            background: d.theme.background_color || DEFAULTS.background,
+            text:       d.theme.text_color       || DEFAULTS.text,
+          });
+        }
+        if (d?.hotel) setHotel(d.hotel);
+      })
+      .catch(() => {})
+      .finally(() => {
+        clearTimeout(hardTimeout);
+        setReady(true);
       });
-      if (d.hotel) setHotel(d.hotel);
-    }).catch(() => {}).finally(() => setReady(true));
+
+    return () => clearTimeout(hardTimeout);
   }, []);
 
   return (

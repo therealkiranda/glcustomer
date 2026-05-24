@@ -1,18 +1,18 @@
 // src/screens/home/HomeScreen.js
 // Author: Kiran Khadka, Contact: +977-9869756622, Mail: therealkiranda@gmail.com
 // © 2026 Kiran Khadka. All rights reserved.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   StatusBar, Dimensions, Image,
 } from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withDelay,
 } from 'react-native-reanimated';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useBooking, formatPrice } from '../../context/BookingContext';
-import CurrencyToggle from '../../components/ui/CurrencyToggle';
 import AnimatedCard from '../../components/ui/AnimatedCard';
 import { RoomCardSkeleton } from '../../components/ui/SkeletonLoader';
 import api from '../../services/api';
@@ -163,7 +163,18 @@ export default function HomeScreen({ navigation }) {
         {/* HERO */}
         <View style={styles.hero}>
           <Animated.View style={[StyleSheet.absoluteFill, heroStyle]}>
-            <View style={[styles.heroBg, { backgroundColor: theme.primary }]} />
+            {hotel.hero_video_path
+              ? <Video
+                  source={{ uri: imgUrl(hotel.hero_video_path) }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode={ResizeMode.COVER}
+                  shouldPlay
+                  isLooping
+                  isMuted
+                  useNativeControls={false}
+                />
+              : <View style={[styles.heroBg, { backgroundColor: theme.primary }]} />
+            }
           </Animated.View>
           <View style={styles.heroOverlay} />
 
@@ -175,8 +186,6 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.heroHotelName}>{hotel.name || 'Hotel'}</Text>
             <View style={[styles.heroLine, { backgroundColor: theme.secondary }]} />
             <Text style={styles.heroTagline}>{hotel.tagline || 'Where Luxury Meets Serenity'}</Text>
-
-            <CurrencyToggle style={styles.currencyToggle} />
 
             <TouchableOpacity
               style={[styles.heroBtn, { backgroundColor: theme.secondary }]}
