@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, StatusBar,
+  TextInput, Alert, ActivityIndicator, StatusBar, Modal, FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
@@ -45,41 +45,83 @@ function Field({ label, value, onChange, keyboard, secure }) {
   );
 }
 
+// FIX: premium dropdown instead of chip grid
 function CurrencySection({ theme }) {
   const { currency, setCurrency } = useBooking();
+  const [show, setShow] = useState(false);
+  const current = CURRENCIES.find(c => c.code === currency) || CURRENCIES[0];
 
   const handleChange = async (code) => {
     setCurrency(code);
     await AsyncStorage.setItem(CURRENCY_CHOSEN_KEY, code);
+    setShow(false);
   };
 
   return (
     <View style={[styles.card, { backgroundColor: theme.white }]}>
       <Text style={[styles.cardTitle, { color: theme.primary }]}>💱 Display Currency</Text>
       <Text style={[styles.currencyHint, { color: theme.textLight }]}>
-        Prices across the app will display in your chosen currency
+        All prices across the app display in this currency
       </Text>
-      <View style={styles.currencyGrid}>
-        {CURRENCIES.map(c => {
-          const active = currency === c.code;
-          return (
-            <TouchableOpacity
-              key={c.code}
-              style={[
-                styles.currencyChip,
-                { borderColor: theme.border, backgroundColor: theme.background },
-                active && { backgroundColor: theme.primary, borderColor: theme.primary },
-              ]}
-              onPress={() => handleChange(c.code)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.currencyFlag}>{c.flag}</Text>
-              <Text style={[styles.currencyCode, { color: active ? '#fff' : theme.text }]}>{c.code}</Text>
-              <Text style={[styles.currencySymbol, { color: active ? theme.secondary : theme.textLight }]}>{c.symbol}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+
+      {/* Dropdown trigger */}
+      <TouchableOpacity
+        style={[styles.currencyDropdown, { borderColor: theme.primary, backgroundColor: theme.primary + '08' }]}
+        onPress={() => setShow(true)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.currencyDropdownLeft}>
+          <Text style={styles.currencyDropdownFlag}>{current.flag}</Text>
+          <View>
+            <Text style={[styles.currencyDropdownCode, { color: theme.primary }]}>{current.code}</Text>
+            <Text style={[styles.currencyDropdownSymbol, { color: theme.textLight }]}>Symbol: {current.symbol}</Text>
+          </View>
+        </View>
+        <Text style={[styles.currencyDropdownArrow, { color: theme.primary }]}>▾</Text>
+      </TouchableOpacity>
+
+      {/* Full-screen modal picker */}
+      <Modal visible={show} transparent animationType="slide">
+        <TouchableOpacity style={styles.currencyOverlay} activeOpacity={1} onPress={() => setShow(false)}>
+          <View style={[styles.currencySheet, { backgroundColor: theme.white }]}>
+            <View style={[styles.currencySheetHandle, { backgroundColor: theme.border }]} />
+            <Text style={[styles.currencySheetTitle, { color: theme.primary }]}>Select Currency</Text>
+            <FlatList
+              data={CURRENCIES}
+              keyExtractor={c => c.code}
+              renderItem={({ item: c }) => {
+                const active = currency === c.code;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyOption,
+                      { borderBottomColor: theme.border },
+                      active && { backgroundColor: theme.primary + '08' },
+                    ]}
+                    onPress={() => handleChange(c.code)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.currencyOptionFlag}>{c.flag}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.currencyOptionCode, { color: active ? theme.primary : theme.text }]}>
+                        {c.code}
+                      </Text>
+                      <Text style={[styles.currencyOptionSymbol, { color: theme.textLight }]}>
+                        Symbol: {c.symbol}
+                      </Text>
+                    </View>
+                    {active && (
+                      <View style={[styles.currencyCheck, { backgroundColor: theme.primary }]}>
+                        <Text style={styles.currencyCheckTxt}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -305,11 +347,22 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 15, fontWeight: '700' },
   editBtn: { fontSize: 14, fontWeight: '700' },
   currencyHint: { fontSize: 12, marginBottom: 14, lineHeight: 18 },
-  currencyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  currencyChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 12, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 10 },
-  currencyFlag: { fontSize: 18 },
-  currencyCode: { fontSize: 13, fontWeight: '800' },
-  currencySymbol: { fontSize: 12, fontWeight: '600' },
+  currencyDropdown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1.5, borderRadius: 14, padding: 16 },
+  currencyDropdownLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  currencyDropdownFlag: { fontSize: 32 },
+  currencyDropdownCode: { fontSize: 17, fontWeight: '800' },
+  currencyDropdownSymbol: { fontSize: 12, marginTop: 2 },
+  currencyDropdownArrow: { fontSize: 20, fontWeight: '700' },
+  currencyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  currencySheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 48, maxHeight: '60%' },
+  currencySheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 4 },
+  currencySheetTitle: { fontSize: 18, fontWeight: '800', paddingHorizontal: 24, paddingVertical: 16 },
+  currencyOption: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 18, borderBottomWidth: 1, gap: 16 },
+  currencyOptionFlag: { fontSize: 28 },
+  currencyOptionCode: { fontSize: 16, fontWeight: '700' },
+  currencyOptionSymbol: { fontSize: 12, marginTop: 3 },
+  currencyCheck: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  currencyCheckTxt: { color: '#fff', fontSize: 14, fontWeight: '800' },
   row: { flexDirection: 'row', gap: 10 },
   half: { flex: 1 },
   field: { marginBottom: 12 },

@@ -15,26 +15,27 @@ import api from '../../services/api';
 const API_BASE = 'https://hotel.primelogic.com.np';
 
 const PAY_METHODS = [
-  { key: 'qr_transfer',   icon: '📱', label: 'QR / Bank Transfer',  sub: 'Scan QR and upload proof' },
-  { key: 'cash',          icon: '💵', label: 'Cash on Arrival',     sub: 'Pay at the front desk' },
+  { key: 'qr_transfer',   icon: '📱', label: 'QR / Bank Transfer',   sub: 'Scan QR and upload proof' },
+  { key: 'cash',          icon: '💵', label: 'Cash on Arrival',      sub: 'Pay at the front desk' },
   { key: 'bank_transfer', icon: '🏦', label: 'Direct Bank Transfer', sub: 'Transfer to hotel account' },
 ];
 
-function SummaryRow({ label, value, bold, accent }) {
+function SummaryRow({ label, value, bold, accent, theme }) {
+  if (value === null || value === undefined || value === '') return null;
   return (
-    <View style={[srStyles.row, bold && srStyles.boldRow]}>
-      <Text style={[srStyles.label, bold && srStyles.boldText]}>{label}</Text>
-      <Text style={[srStyles.value, bold && srStyles.boldText, accent && srStyles.accentText]}>{value}</Text>
+    <View style={[srStyles.row, bold && srStyles.boldRow, { borderBottomColor: '#f1f5f9' }]}>
+      <Text style={[srStyles.label, bold && srStyles.boldLabel]}>{label}</Text>
+      <Text style={[srStyles.value, bold && srStyles.boldValue, accent && { color: '#c9a96e' }]}>{value}</Text>
     </View>
   );
 }
 const srStyles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  boldRow: { borderBottomWidth: 0, paddingTop: 12, paddingBottom: 4 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1 },
+  boldRow: { borderBottomWidth: 0, paddingTop: 14 },
   label: { fontSize: 13, color: '#6b7280' },
   value: { fontSize: 13, color: '#1e293b', fontWeight: '500', maxWidth: '55%', textAlign: 'right' },
-  boldText: { fontWeight: '800', fontSize: 18, color: '#1a3c2e' },
-  accentText: { color: '#c9a96e' },
+  boldLabel: { fontSize: 15, fontWeight: '700', color: '#1a3c2e' },
+  boldValue: { fontSize: 20, fontWeight: '800', color: '#1a3c2e' },
 });
 
 export default function BookingStep3Screen({ navigation }) {
@@ -46,37 +47,43 @@ export default function BookingStep3Screen({ navigation }) {
 
   const { guestDetails, room, checkIn, checkOut, paymentMethod = 'qr_transfer' } = booking;
 
+  // FIX: safe room name — never show "undefined — undefined"
+  const roomLabel = room
+    ? [room.room_number ? `Room ${room.room_number}` : null, room.category_name].filter(Boolean).join(' — ')
+    : 'Not selected';
+
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission Required', 'Please allow photo library access.'); return; }
     const r = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85,
     });
     if (!r.canceled) setProofUri(r.assets[0].uri);
   };
 
   const handleSubmit = async () => {
+    if (!room?.id) { Alert.alert('No Room Selected', 'Please go back and select a room.'); return; }
     if (paymentMethod === 'qr_transfer' && !proofUri) {
       Alert.alert('Payment Proof Required', 'Please upload your payment proof before confirming.'); return;
     }
     setLoading(true);
     try {
       const fd = new FormData();
-      fd.append('room_id',           room.id);
+      // FIX: ensure all numeric fields are strings of valid numbers — prevent NaN
+      fd.append('room_id',           String(room.id));
       fd.append('check_in_date',     checkIn);
       fd.append('check_out_date',    checkOut);
-      fd.append('adults',            booking.adults);
-      fd.append('children',          booking.children);
-      fd.append('guest_first_name',  guestDetails.first_name);
-      fd.append('guest_last_name',   guestDetails.last_name);
-      fd.append('guest_email',       guestDetails.email);
-      fd.append('guest_phone',       guestDetails.phone);
-      fd.append('guest_nationality', guestDetails.nationality || '');
-      fd.append('guest_id_type',     guestDetails.id_type || '');
-      fd.append('guest_id_number',   guestDetails.id_number || '');
+      fd.append('adults',            String(Number(booking.adults) || 1));
+      fd.append('children',          String(Number(booking.children) || 0));
+      fd.append('guest_first_name',  guestDetails?.first_name || '');
+      fd.append('guest_last_name',   guestDetails?.last_name  || '');
+      fd.append('guest_email',       guestDetails?.email      || '');
+      fd.append('guest_phone',       guestDetails?.phone      || '');
+      fd.append('guest_nationality', guestDetails?.nationality || '');
+      fd.append('guest_id_type',     guestDetails?.id_type    || '');
+      fd.append('guest_id_number',   guestDetails?.id_number  || '');
       fd.append('payment_method',    paymentMethod);
-      fd.append('special_requests',  booking.specialRequests || '');
+      fd.append('special_requests',  booking.specialRequests  || '');
       if (proofUri) {
         fd.append('payment_proof', { uri: proofUri, name: 'proof.jpg', type: 'image/jpeg' });
       }
@@ -110,27 +117,30 @@ export default function BookingStep3Screen({ navigation }) {
         {/* Booking Summary */}
         <View style={[styles.card, { backgroundColor: theme.white }]}>
           <Text style={[styles.cardTitle, { color: theme.primary }]}>📋 Booking Summary</Text>
-          <SummaryRow label="Room"      value={`${room?.room_number} — ${room?.category_name}`} />
-          <SummaryRow label="Check-in"  value={checkIn} />
-          <SummaryRow label="Check-out" value={checkOut} />
-          <SummaryRow label="Nights"    value={`${nights} night${nights !== 1 ? 's' : ''}`} />
-          <SummaryRow label="Guests"    value={`${booking.adults} adult${booking.adults !== 1 ? 's' : ''}${booking.children > 0 ? `, ${booking.children} child` : ''}`} />
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <SummaryRow label={`Room rate × ${nights}`}  value={formatPrice(subtotal, currency)} />
-          <SummaryRow label="VAT (13%)"                value={formatPrice(taxes, currency)} />
-          <SummaryRow label="Service charge (10%)"     value={formatPrice(serviceCharge, currency)} />
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <SummaryRow label="Total Payable" value={formatPrice(total, currency)} bold accent />
+          <SummaryRow label="Room"      value={roomLabel} theme={theme} />
+          <SummaryRow label="Check-in"  value={checkIn}   theme={theme} />
+          <SummaryRow label="Check-out" value={checkOut}  theme={theme} />
+          <SummaryRow label="Duration"  value={`${nights} night${nights !== 1 ? 's' : ''}`} theme={theme} />
+          <SummaryRow label="Guests"
+            value={`${booking.adults} adult${booking.adults !== 1 ? 's' : ''}${booking.children > 0 ? `, ${booking.children} child` : ''}`}
+            theme={theme}
+          />
+          <View style={[styles.divider, { backgroundColor: '#f1f5f9' }]} />
+          <SummaryRow label={`Room rate × ${nights}`} value={formatPrice(subtotal, currency)} theme={theme} />
+          <SummaryRow label="VAT (13%)"               value={formatPrice(taxes, currency)} theme={theme} />
+          <SummaryRow label="Service (10%)"           value={formatPrice(serviceCharge, currency)} theme={theme} />
+          <View style={[styles.divider, { backgroundColor: '#f1f5f9' }]} />
+          <SummaryRow label="Total Payable" value={formatPrice(total, currency)} bold accent theme={theme} />
         </View>
 
         {/* Guest Summary */}
         <View style={[styles.card, { backgroundColor: theme.white }]}>
           <Text style={[styles.cardTitle, { color: theme.primary }]}>👤 Guest Details</Text>
-          <SummaryRow label="Name"    value={`${guestDetails?.first_name} ${guestDetails?.last_name}`} />
-          <SummaryRow label="Email"   value={guestDetails?.email} />
-          <SummaryRow label="Phone"   value={guestDetails?.phone} />
-          {guestDetails?.nationality && <SummaryRow label="Nationality" value={guestDetails.nationality} />}
-          {guestDetails?.id_type     && <SummaryRow label="ID Type"     value={guestDetails.id_type} />}
+          <SummaryRow label="Name"    value={`${guestDetails?.first_name || ''} ${guestDetails?.last_name || ''}`.trim()} theme={theme} />
+          <SummaryRow label="Email"   value={guestDetails?.email}       theme={theme} />
+          <SummaryRow label="Phone"   value={guestDetails?.phone}       theme={theme} />
+          <SummaryRow label="Nationality" value={guestDetails?.nationality} theme={theme} />
+          <SummaryRow label="ID"      value={guestDetails?.id_type && guestDetails?.id_number ? `${guestDetails.id_type}: ${guestDetails.id_number}` : guestDetails?.id_type} theme={theme} />
         </View>
 
         {/* Payment Method */}
@@ -163,31 +173,23 @@ export default function BookingStep3Screen({ navigation }) {
         {paymentMethod === 'qr_transfer' && (
           <View style={[styles.card, { backgroundColor: theme.white }]}>
             <Text style={[styles.cardTitle, { color: theme.primary }]}>📱 Scan & Pay</Text>
-
             {hotel.qr_code_image_path
-              ? <Image
-                  source={{ uri: `${API_BASE}/${hotel.qr_code_image_path}` }}
-                  style={styles.qrImage}
-                  resizeMode="contain"
-                />
+              ? <Image source={{ uri: `${API_BASE}/${hotel.qr_code_image_path}` }} style={styles.qrImage} resizeMode="contain" />
               : <View style={[styles.qrPlaceholder, { backgroundColor: theme.background }]}>
                   <Text style={{ fontSize: 52 }}>📱</Text>
                   <Text style={[styles.qrPlaceholderText, { color: theme.textLight }]}>QR not configured</Text>
                 </View>
             }
-
             {(hotel.qr_bank_name || hotel.qr_account_name) && (
               <View style={[styles.bankBox, { backgroundColor: theme.background }]}>
-                {hotel.qr_bank_name     && <Text style={[styles.bankName,  { color: theme.primary }]}>{hotel.qr_bank_name}</Text>}
-                {hotel.qr_account_name  && <Text style={[styles.bankDetail, { color: theme.textLight }]}>Account: {hotel.qr_account_name}</Text>}
+                {hotel.qr_bank_name      && <Text style={[styles.bankName,   { color: theme.primary }]}>{hotel.qr_bank_name}</Text>}
+                {hotel.qr_account_name   && <Text style={[styles.bankDetail, { color: theme.textLight }]}>Account: {hotel.qr_account_name}</Text>}
                 {hotel.qr_account_number && <Text style={[styles.bankDetail, { color: theme.textLight }]}>Number: {hotel.qr_account_number}</Text>}
               </View>
             )}
-
             {hotel.qr_payment_instructions && (
               <Text style={[styles.payInstructions, { color: theme.textLight }]}>{hotel.qr_payment_instructions}</Text>
             )}
-
             <Text style={[styles.proofLabel, { color: theme.primary }]}>Upload Payment Proof *</Text>
             <TouchableOpacity
               style={[styles.uploadBtn, { borderColor: proofUri ? theme.primary : theme.border }]}
@@ -204,7 +206,7 @@ export default function BookingStep3Screen({ navigation }) {
             </TouchableOpacity>
             {proofUri && (
               <TouchableOpacity onPress={() => setProofUri(null)} style={styles.removeBtn}>
-                <Text style={[styles.removeBtnText, { color: theme.error || '#dc2626' }]}>Remove ✕</Text>
+                <Text style={[styles.removeBtnText, { color: '#dc2626' }]}>Remove ✕</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -246,7 +248,7 @@ const styles = StyleSheet.create({
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   radioDot: { width: 10, height: 10, borderRadius: 5 },
   qrImage: { width: '100%', height: 240, borderRadius: 14, marginBottom: 16 },
-  qrPlaceholder: { height: 200, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  qrPlaceholder: { height: 180, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   qrPlaceholderText: { fontSize: 13, marginTop: 10 },
   bankBox: { borderRadius: 12, padding: 14, marginBottom: 14 },
   bankName: { fontSize: 15, fontWeight: '800', marginBottom: 6 },
@@ -257,12 +259,9 @@ const styles = StyleSheet.create({
   uploadIcon: { fontSize: 36, marginBottom: 10 },
   uploadText: { fontSize: 15, fontWeight: '700' },
   uploadSub: { fontSize: 12, marginTop: 6 },
-  proofPreview: { width: '100%', height: 210, borderRadius: 12 },
+  proofPreview: { width: '100%', height: 200, borderRadius: 12 },
   removeBtn: { alignItems: 'center', paddingVertical: 10, marginTop: 8 },
   removeBtnText: { fontSize: 13, fontWeight: '700' },
-  confirmBtn: {
-    borderRadius: 18, paddingVertical: 20, alignItems: 'center',
-    shadowColor: '#1a3c2e', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8,
-  },
+  confirmBtn: { borderRadius: 18, paddingVertical: 20, alignItems: 'center', shadowColor: '#1a3c2e', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 },
   confirmText: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
 });
