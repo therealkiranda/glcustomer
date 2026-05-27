@@ -84,7 +84,7 @@ export default function BlogScreen({ navigation }) {
       <StatusBar barStyle="light-content" backgroundColor={theme.primary} />
       <View style={[styles.header, { backgroundColor: theme.primary }]}>
         <Text style={styles.headerTitle}>Our Blog</Text>
-        <Text style={styles.headerSub}>Stories, tips & hotel updates</Text>
+        <Text style={styles.headerSub}>Stories, tips & {hotel.name ? `${hotel.name} updates` : 'hotel updates'}</Text>
       </View>
 
       {loading ? (

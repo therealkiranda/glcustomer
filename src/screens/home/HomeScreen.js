@@ -236,9 +236,16 @@ export default function HomeScreen({ navigation }) {
                   positionMillis={0}
                   rate={1.0}
                   volume={0}
+                  onReadyForDisplay={() => {}}
                   onError={(e) => console.log('Video error:', e)}
                 />
-              : <View style={[styles.heroBg, { backgroundColor: theme.primary }]} />
+              : hotel.hero_image_path
+                ? <Image
+                    source={{ uri: imgUrl(hotel.hero_image_path) }}
+                    style={StyleSheet.absoluteFill}
+                    resizeMode="cover"
+                  />
+                : <View style={[styles.heroBg, { backgroundColor: theme.primary }]} />
             }
           </Animated.View>
           <View style={[styles.heroOverlay, hotel.hero_video_path && styles.heroOverlayDark]} />

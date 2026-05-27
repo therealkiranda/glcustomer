@@ -1,6 +1,4 @@
 // src/context/ThemeContext.js
-// Author: Kiran Khadka, Contact: +977-9869756622, Mail: therealkiranda@gmail.com
-// © 2026 Kiran Khadka. All rights reserved.
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import api from '../services/api';
 
@@ -13,19 +11,21 @@ const DEFAULTS = {
 };
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState(DEFAULTS);
-  const [hotel, setHotel] = useState({
+  const [theme, setTheme]   = useState(DEFAULTS);
+  const [hotel, setHotel]   = useState({
     name: '', tagline: '', currency_symbol: 'Rs', default_currency: 'NPR',
+    hero_video_path: null, hero_image_path: null, hero_type: null,
   });
-  const [ready, setReady] = useState(false);
+  const [ready, setReady]   = useState(false);
 
   useEffect(() => {
-    // Hard timeout — ready fires after 4s max regardless of API
     const hardTimeout = setTimeout(() => setReady(true), 4000);
 
     api.get('/public/settings')
       .then(r => {
         const d = r.data;
+
+        // ── Theme colours ────────────────────────────────────
         if (d?.theme) {
           setTheme({
             ...DEFAULTS,
@@ -35,7 +35,31 @@ export const ThemeProvider = ({ children }) => {
             text:       d.theme.text_color       || DEFAULTS.text,
           });
         }
-        if (d?.hotel) setHotel(d.hotel);
+
+        // ── Hotel info + hero video from theme_settings ──────
+        // Backend returns theme row which has lumiere_hero_video / hero_video_url
+        // Map whichever field is set into a single hero_video_path
+        const t = d?.theme || {};
+        const heroVideo =
+          t.lumiere_hero_video ||
+          t.azure_hero_video   ||
+          t.noir_hero_video    ||
+          t.hero_video_url     ||
+          null;
+        const heroImage =
+          t.lumiere_hero_image ||
+          t.azure_hero_image   ||
+          t.noir_hero_image    ||
+          null;
+
+        if (d?.hotel) {
+          setHotel({
+            ...d.hotel,
+            hero_video_path: heroVideo,
+            hero_image_path: heroImage,
+            hero_type: t.hero_type || (heroVideo ? 'video' : heroImage ? 'image' : null),
+          });
+        }
       })
       .catch(() => {})
       .finally(() => {

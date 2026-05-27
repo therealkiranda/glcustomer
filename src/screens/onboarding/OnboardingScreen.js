@@ -15,29 +15,33 @@ import { useTheme } from '../../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
-const SLIDES = [
-  {
-    id: '1', emoji: '🏨',
-    headline: 'Welcome to\nLuxury',
-    sub: "Experience world-class hospitality nestled in the heart of Nepal's most scenic landscapes.",
-    bg: '#0f2419', accent: '#c9a96e',
-    detail: 'Surrounded by tea gardens and misty mountains',
-  },
-  {
-    id: '2', emoji: '🛏',
-    headline: 'Book Your\nPerfect Room',
-    sub: 'Browse our handcrafted rooms, check real-time availability, and reserve in under a minute.',
-    bg: '#1a1a2e', accent: '#c9a96e',
-    detail: 'Instant confirmation · No hidden fees',
-  },
-  {
-    id: '3', emoji: '✨',
-    headline: 'Your Stay,\nYour Way',
-    sub: "Track bookings, upload payment, request anything. We're here before, during, and after your stay.",
-    bg: '#2d1b0e', accent: '#c9a96e',
-    detail: '24/7 support · Loyalty rewards · Easy checkout',
-  },
-];
+// Slides are generated at render time so hotel.name is always live
+function buildSlides(hotelName) {
+  const name = hotelName || 'Luxury';
+  return [
+    {
+      id: '1', emoji: '🏨',
+      headline: `Welcome to\n${name}`,
+      sub: 'Experience world-class hospitality. Book, manage, and enjoy your stay — all in one place.',
+      bg: '#0f2419', accent: '#c9a96e',
+      detail: 'Seamless booking · Instant confirmation',
+    },
+    {
+      id: '2', emoji: '🛏',
+      headline: 'Book Your\nPerfect Room',
+      sub: 'Browse handcrafted rooms, check real-time availability, and reserve in under a minute.',
+      bg: '#1a1a2e', accent: '#c9a96e',
+      detail: 'Instant confirmation · No hidden fees',
+    },
+    {
+      id: '3', emoji: '✨',
+      headline: 'Your Stay,\nYour Way',
+      sub: "Track bookings, upload payment, request anything. We're here before, during, and after your stay.",
+      bg: '#2d1b0e', accent: '#c9a96e',
+      detail: '24/7 support · Loyalty rewards · Easy checkout',
+    },
+  ];
+}
 
 function Slide({ item, index, scrollX }) {
   const animStyle = useAnimatedStyle(() => {
@@ -91,6 +95,7 @@ function AnimatedDot({ index, scrollX, active, accent }) {
 
 export default function OnboardingScreen({ navigation }) {
   const { hotel } = useTheme();
+  const SLIDES = buildSlides(hotel.name);
   const [activeIndex, setActiveIndex] = useState(0);
   const flatRef = useRef(null);
   const scrollX = useSharedValue(0);
