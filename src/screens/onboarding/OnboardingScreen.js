@@ -13,6 +13,9 @@ import Animated, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../context/ThemeContext';
 
+// Must match ONBOARDING_VERSION in SplashScreen.js
+const ONBOARDING_VERSION = 'v2';
+
 const { width, height } = Dimensions.get('window');
 
 // Slides are generated at render time so hotel.name is always live
@@ -105,12 +108,12 @@ export default function OnboardingScreen({ navigation }) {
   });
 
   const finish = async () => {
-    await AsyncStorage.setItem('gl_onboarded', '1');
+    await AsyncStorage.setItem('gl_onboarded', ONBOARDING_VERSION);
     navigation.replace('Main');
   };
 
   const goToLogin = async () => {
-    await AsyncStorage.setItem('gl_onboarded', '1');
+    await AsyncStorage.setItem('gl_onboarded', ONBOARDING_VERSION);
     navigation.replace('Login');
   };
 

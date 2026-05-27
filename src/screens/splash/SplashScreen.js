@@ -15,6 +15,8 @@ import CurrencyPickerModal, { CURRENCY_CHOSEN_KEY } from '../../components/ui/Cu
 const MIN_SPLASH_MS = 2000;
 // Max time to wait for API before giving up and proceeding anyway
 const API_TIMEOUT_MS = 5000;
+// Bump this string whenever you want onboarding to show again for all users
+const ONBOARDING_VERSION = 'v2';
 
 export default function SplashScreen({ navigation }) {
   const { theme, hotel, ready } = useTheme();
@@ -59,14 +61,16 @@ export default function SplashScreen({ navigation }) {
 
     // Restore saved currency
     try {
-      const [onboarded, savedCurrency, currencyChosen] = await Promise.all([
+      const [onboardedVersion, savedCurrency, currencyChosen] = await Promise.all([
         AsyncStorage.getItem('gl_onboarded'),
         AsyncStorage.getItem(CURRENCY_CHOSEN_KEY),
         AsyncStorage.getItem(CURRENCY_CHOSEN_KEY),
       ]);
 
       if (savedCurrency) setCurrency(savedCurrency);
-      destinationRef.current = onboarded ? 'Main' : 'Onboarding';
+      // Show onboarding if never seen OR if app version changed
+      const hasOnboarded = onboardedVersion === ONBOARDING_VERSION;
+      destinationRef.current = hasOnboarded ? 'Main' : 'Onboarding';
 
       // Ensure minimum display time
       const elapsed   = Date.now() - startTime.current;

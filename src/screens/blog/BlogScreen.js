@@ -22,7 +22,7 @@ function BlogSkeleton() {
 }
 
 export default function BlogScreen({ navigation }) {
-  const { theme }     = useTheme();
+  const { theme, hotel } = useTheme();
   const [posts, setPosts]         = useState([]);
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
