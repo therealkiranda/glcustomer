@@ -1,7 +1,7 @@
 // src/screens/booking/BookingStep3Screen.js
 // Author: Kiran Khadka, Contact: +977-9869756622, Mail: therealkiranda@gmail.com
 // © 2026 Kiran Khadka. All rights reserved.
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Alert, ActivityIndicator, StatusBar,
@@ -19,6 +19,19 @@ const PAY_METHODS = [
   { key: 'cash',          icon: '💵', label: 'Cash on Arrival',      sub: 'Pay at the front desk' },
   { key: 'bank_transfer', icon: '🏦', label: 'Direct Bank Transfer', sub: 'Transfer to hotel account' },
 ];
+
+// Generate invoice number: M052601
+// = First letter of month + MM + DD + room_number
+// e.g. May 26, Room 1 → M052601
+const MONTH_LETTERS = ['J','F','M','A','M','J','J','A','S','O','N','D'];
+function generateInvoiceNumber(roomNumber) {
+  const now  = new Date();
+  const ml   = MONTH_LETTERS[now.getMonth()];              // M
+  const mm   = String(now.getMonth() + 1).padStart(2,'0'); // 05
+  const dd   = String(now.getDate()).padStart(2,'0');       // 26
+  const room = String(roomNumber || '0').padStart(2,'0');   // 01
+  return `${ml}${mm}${dd}${room}`;                          // M052601
+}
 
 function SummaryRow({ label, value, bold, accent, theme }) {
   if (value === null || value === undefined || value === '') return null;
@@ -45,9 +58,11 @@ export default function BookingStep3Screen({ navigation }) {
   const [loading, setLoading]   = useState(false);
   const [proofUri, setProofUri] = useState(null);
 
+  // Generate once per screen mount using room number
+  const invoiceNumber = useMemo(() => generateInvoiceNumber(room?.room_number), [room?.room_number]);
+
   const { guestDetails, room, checkIn, checkOut, paymentMethod = 'qr_transfer' } = booking;
 
-  // FIX: safe room name — never show "undefined — undefined"
   const roomLabel = room
     ? [room.room_number ? `Room ${room.room_number}` : null, room.category_name].filter(Boolean).join(' — ')
     : 'Not selected';
@@ -68,13 +83,30 @@ export default function BookingStep3Screen({ navigation }) {
     }
     setLoading(true);
     try {
+      // FIX: Compute all numeric values safely — prevent NaN reaching the server
+      const safeRoomId    = parseInt(room.id, 10);
+      const safeAdults    = parseInt(booking.adults, 10)    || 1;
+      const safeChildren  = parseInt(booking.children, 10)  || 0;
+      const safeNights    = Math.max(1, nights || 1);
+      const safeBasePrice = parseFloat(room.base_price || room.price_per_night || 0) || 0;
+      const safeSubtotal  = safeBasePrice * safeNights;
+      const safeTax       = Math.round(safeSubtotal * 0.13 * 100) / 100;
+      const safeSvc       = Math.round(safeSubtotal * 0.10 * 100) / 100;
+      const safeTotal     = Math.round((safeSubtotal + safeTax + safeSvc) * 100) / 100;
+
       const fd = new FormData();
-      // FIX: ensure all numeric fields are strings of valid numbers — prevent NaN
-      fd.append('room_id',           String(room.id));
-      fd.append('check_in_date',     checkIn);
-      fd.append('check_out_date',    checkOut);
-      fd.append('adults',            String(Number(booking.adults) || 1));
-      fd.append('children',          String(Number(booking.children) || 0));
+      fd.append('room_id',           String(safeRoomId));
+      fd.append('room_category_id',  String(parseInt(room.category_id, 10) || ''));
+      fd.append('check_in_date',     checkIn  || '');
+      fd.append('check_out_date',    checkOut || '');
+      fd.append('adults',            String(safeAdults));
+      fd.append('children',          String(safeChildren));
+      fd.append('nights',            String(safeNights));
+      fd.append('subtotal',          String(safeSubtotal));
+      fd.append('tax_amount',        String(safeTax));
+      fd.append('service_charge',    String(safeSvc));
+      fd.append('total_amount',      String(safeTotal));
+      fd.append('invoice_number',    invoiceNumber);
       fd.append('guest_first_name',  guestDetails?.first_name || '');
       fd.append('guest_last_name',   guestDetails?.last_name  || '');
       fd.append('guest_email',       guestDetails?.email      || '');
@@ -84,14 +116,17 @@ export default function BookingStep3Screen({ navigation }) {
       fd.append('guest_id_number',   guestDetails?.id_number  || '');
       fd.append('payment_method',    paymentMethod);
       fd.append('special_requests',  booking.specialRequests  || '');
+
       if (proofUri) {
         fd.append('payment_proof', { uri: proofUri, name: 'proof.jpg', type: 'image/jpeg' });
       }
+
       const res = await api.post('/bookings', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       resetBooking();
       navigation.replace('Success', { booking: res.data });
     } catch (e) {
-      Alert.alert('Booking Failed', e.response?.data?.error || e.response?.data?.message || 'Something went wrong. Please try again.');
+      const msg = e.response?.data?.error || e.response?.data?.message || 'Something went wrong. Please try again.';
+      Alert.alert('Booking Failed', msg);
     } finally { setLoading(false); }
   };
 
@@ -173,6 +208,16 @@ export default function BookingStep3Screen({ navigation }) {
         {paymentMethod === 'qr_transfer' && (
           <View style={[styles.card, { backgroundColor: theme.white }]}>
             <Text style={[styles.cardTitle, { color: theme.primary }]}>📱 Scan & Pay</Text>
+
+            {/* FIX: Invoice number displayed prominently so user can enter it in payment */}
+            <View style={[styles.invoiceBox, { backgroundColor: theme.primary + '0D', borderColor: theme.primary + '30' }]}>
+              <Text style={[styles.invoiceLabel, { color: theme.textLight }]}>YOUR INVOICE NUMBER</Text>
+              <Text style={[styles.invoiceCode, { color: theme.primary }]}>{invoiceNumber}</Text>
+              <Text style={[styles.invoiceHint, { color: theme.textLight }]}>
+                Enter this as the payment reference / remarks when scanning the QR
+              </Text>
+            </View>
+
             {hotel.qr_code_image_path
               ? <Image source={{ uri: `${API_BASE}/${hotel.qr_code_image_path}` }} style={styles.qrImage} resizeMode="contain" />
               : <View style={[styles.qrPlaceholder, { backgroundColor: theme.background }]}>
@@ -247,6 +292,11 @@ const styles = StyleSheet.create({
   paySub: { fontSize: 12, marginTop: 2 },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   radioDot: { width: 10, height: 10, borderRadius: 5 },
+  // FIX: Invoice box styles
+  invoiceBox: { borderRadius: 14, borderWidth: 1.5, padding: 16, marginBottom: 18, alignItems: 'center' },
+  invoiceLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
+  invoiceCode: { fontSize: 24, fontWeight: '900', letterSpacing: 2, marginBottom: 8 },
+  invoiceHint: { fontSize: 12, textAlign: 'center', lineHeight: 18 },
   qrImage: { width: '100%', height: 240, borderRadius: 14, marginBottom: 16 },
   qrPlaceholder: { height: 180, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   qrPlaceholderText: { fontSize: 13, marginTop: 10 },

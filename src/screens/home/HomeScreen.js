@@ -227,11 +227,16 @@ export default function HomeScreen({ navigation }) {
               ? <Video
                   source={{ uri: imgUrl(hotel.hero_video_path) }}
                   style={StyleSheet.absoluteFill}
+                  videoStyle={StyleSheet.absoluteFill}
                   resizeMode={ResizeMode.COVER}
-                  shouldPlay
-                  isLooping
-                  isMuted
+                  shouldPlay={true}
+                  isLooping={true}
+                  isMuted={true}
                   useNativeControls={false}
+                  positionMillis={0}
+                  rate={1.0}
+                  volume={0}
+                  onError={(e) => console.log('Video error:', e)}
                 />
               : <View style={[styles.heroBg, { backgroundColor: theme.primary }]} />
             }
